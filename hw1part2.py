@@ -2,6 +2,7 @@ import io, time, json
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urlparse, parse_qs
+import math
 
 import base64
 
@@ -272,7 +273,7 @@ def get_tracks(client_id, client_secret, artist_name):
     total_items = 200
     limit = 50
     
-    tracks_request = paginated_spotify_search_requests(api_key, location, total_items,limit)
+    tracks_request = paginated_spotify_search_requests(client_id, client_secret, artist_name, total_items, limit)
     
     # Use returned list of (url, headers, url_params) and function api_get_request to retrive all restaurants
     # REMEMBER to pause slightly after each request.
