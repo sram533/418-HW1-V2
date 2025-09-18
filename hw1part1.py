@@ -103,7 +103,7 @@ def assigned_scheduled_times(arrival_times, scheduled_times):
     
     return pd.DataFrame({
     'Arrival Times': actual,
-    'Scheduled Times': scheduled_assigned
+    'Scheduled Times': scheduled
     })
 
 
