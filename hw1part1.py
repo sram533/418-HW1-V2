@@ -129,7 +129,7 @@ def conv_to_mins(time):
 
 
 def hhmm_to_minutes(hhmm):
-        """Convert numeric HHMM to minutes since midnight."""
+    """Convert numeric HHMM to minutes since midnight."""
     str_val = str(int(hhmm)).zfill(4)
     hours, minutes = int(str_val[:2]), int(str_val[2:])
     
@@ -137,6 +137,8 @@ def hhmm_to_minutes(hhmm):
         return np.nan
     
     return hours * 60 + minutes
+    
+    
 def calc_delay(assigned_scheduled_times):
     """
     Calculates delay times y - x
