@@ -55,24 +55,20 @@ def convert_to_minofday(time):
     Example: 13:03 is converted to 783.0
     """
     
-    time_parts = time.str.split(':')
-    hours = time_parts.str[0]
-    hours.astype(float)
-    
-    minutes = time_parts.str[1]
-    minutes.astype(float)
-    
-    seconds= time_parts.str[2]
-    seconds.astype(float)
-    
+    time_parts = time.str.split(':', expand=True)
+    hours   = pd.to_numeric(time_parts[0], errors='coerce')
+    minutes = pd.to_numeric(time_parts[1], errors='coerce')
+    seconds = pd.to_numeric(time_parts[2], errors='coerce')
     
     total_minutes = hours * 60 + minutes
-    total_minutes = total_minutes.where(
-        (hours >= 0) & (hours < 24) & (minutes >= 0) & (minutes < 60) & (seconds >= 0) & (seconds < 60),
-        np.nan
+    mask = (
+        hours.between(0, 23) &
+        minutes.between(0, 59) &
+        seconds.between(0, 59)
     )
-    
-    return total_minutes
+
+    return total_minutes.where(mask, np.nan).astype(float)
+
     
 
 # 3%credit
@@ -130,13 +126,17 @@ def conv_to_mins(time):
 
 def hhmm_to_minutes(hhmm):
     """Convert numeric HHMM to minutes since midnight."""
-    str_val = str(int(hhmm)).zfill(4)
-    hours, minutes = int(str_val[:2]), int(str_val[2:])
-    
+    if pd.isna(hhmm):
+        return np.nan
+    try:
+        v = int(hhmm)
+    except (TypeError, ValueError):
+        return np.nan
+
+    hours, minutes = divmod(v, 100)
     if not (0 <= hours < 24 and 0 <= minutes < 60):
         return np.nan
-    
-    return hours * 60 + minutes
+    return float(hours * 60 + minutes)
     
     
 def calc_delay(assigned_scheduled_times):
@@ -155,6 +155,5 @@ def calc_delay(assigned_scheduled_times):
     scheduled_minutes = assigned_scheduled_times.iloc[:, 0].apply(hhmm_to_minutes)
     actual_minutes = assigned_scheduled_times.iloc[:, 1].apply(hhmm_to_minutes)
     
-    delay = actual_minutes - scheduled_minutes
-    
+    delay = (actual_minutes - scheduled_minutes).astype(float)
     return delay
