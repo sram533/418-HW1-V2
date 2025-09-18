@@ -17,8 +17,20 @@ def retrieve_html(url):
         status_code (integer):
         raw_html (string): the raw HTML content of the response, properly encoded according to the HTTP headers.
     """
-    
-    [YOUR CODE HERE]
+    headers = {"User-Agent": "my-app/1.0"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=10)
+        resp.raise_for_status()
+        return resp.status_code, resp.text
+    except requests.HTTPError as e:
+        print(f"HTTP error: {e.response.status_code} → {e}")
+    except requests.ConnectionError:
+        print("Connection error: unable to reach the server.")
+    except requests.Timeout:
+        print("Request timed out.")
+    except requests.RequestException as e:
+        print(f"Unexpected error: {e}")
+    return None, ""
 
 #3% credit
 def parse_imdb(imdb_data):
@@ -50,7 +62,42 @@ def parse_imdb(imdb_data):
     
     """
 
-    [YOUR CODE HERE]
+    movies = []
+    
+    if isinstance(imdb_data, tuple):
+        status_code, html_text = imdb_data
+        if status_code != 200:
+            return []
+    else:
+        html_text = imdb_data
+        
+    soup = BeautifulSoup(html_text, "html.parser")
+    
+    script_tag = soup.select_one('script[type="application/ld+json"]')
+    if not script_tag:
+        return movies
+    
+    
+    try:
+        payload = json.loads(script_tag.get_text(strip=True))
+    except json.JSONDecodeError as e:
+        print(f"Error parsing JSON data: {e}")
+        return movies
+    
+
+    items = payload.get("itemListElement", []) if isinstance(payload, dict) else []
+
+    for el in items:
+        info = (el or {}).get("item", {}) or {}
+        rating = (info.get("aggregateRating") or {}).get("ratingValue", 0.0)
+        movies.append({
+            "Title": info.get("name", "N/A"),
+            "Description": info.get("description", "No description available"),
+            "Rating": rating,
+        })
+
+    return movies
+    
 
 # 1% credit
 def read_api_key(filepath):
@@ -76,35 +123,57 @@ def access_spotify(client_id, client_secret):
     """
     # 
     auth_url = 'https://accounts.spotify.com/api/token'
-    auth_header = [YOUR CODE HERE]
+    auth_bytes = f"{client_id}:{client_secret}".encode("utf-8")
+    auth_base64 = base64.b64encode(auth_bytes).decode("utf-8")
 
     headers = {
-        'Authorization': f'Basic {auth_header}',
+        'Authorization': f'Basic {auth_base64}',
+        #'Content-Type': 'application/x-www-form-urlencoded'
     }
     data = {
         'grant_type': 'client_credentials'
     }
     
-    response = [YOUR CODE HERE]
-    access_token = [YOUR CODE HERE]
-    
-    return access_token
+    try:
+        resp = requests.post(auth_url, headers=headers, data=data, timeout=10)
+        resp.raise_for_status()
+        return resp.json().get("access_token")
+    except requests.RequestException as e:
+        print(f"Error retrieving Spotify token: {e}")
+        return ""
 
 # 4% credit    
 def spotify_search_params(client_id, client_secret, **kwargs):
     """
     Construct url, headers and params. Reference API docs (link above) to use the arguments
     """
+    
+    access_token = access_spotify(client_id, client_secret)
     # What is the url endpoint for search?
-    url = [YOUR CODE HERE]
+    url = 'https://api.spotify.com/v1/search'
     # How is Authentication performed? Hint: use access_token from function of access_spotify
-    headers = [YOUR CODE HERE]
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
     # SPACES in url is problematic. How should you handle queries with field filters?
-    query = [YOUR CODE HERE]
+    query_parts = []
+    for key, value in kwargs.items():
+        if key in ['artist', 'track', 'album', 'year', 'genre', 'label']:
+            query_parts.append(f"{key}:{value}")
+            
+    query = ' '.join(query_parts)
     # Include keyword arguments in params dictionary
-    params = [YOUR CODE HERE]
+    params = {
+        'q': query,
+        'type': kwargs.get('type', 'track'),  
+        'limit': kwargs.get('limit', 20),    
+        'offset': kwargs.get('offset', 0)     
+    }
+    
+    params = {k: v for k, v in params.items() if v is not None}
     
     return url, headers, params
+
 
 
 # 2% credit
@@ -121,8 +190,9 @@ def api_get_request(url, headers, params):
         results (json): response as json
     """
     # See requests.request?
-    response = [YOUR CODE HERE]
-    return [YOUR CODE HERE]
+    response = requests.get(url, headers=headers, params=params)
+    response.raise_for_status()
+    return response.json()
     
 
 def spotify_search(client_id, client_secret, **kwargs):
@@ -168,7 +238,22 @@ def paginated_spotify_search_requests(client_id, client_secret, artist_name, tot
     """
     # HINT: Use total, offset and limit for pagination
     # You can reuse function location_search_params(...)
-    [YOUR CODE HERE]
+    num_pages = math.ceil(total / limit)
+    
+    # Generate requests for each page
+    all_requests = [
+        spotify_search_params(
+            client_id,
+            client_secret,
+            artist=artist_name,
+            type="track",
+            limit=limit,
+            offset=page * limit,
+        )
+        for page in range(num_pages)
+    ]
+
+    return all_requests
 
 
 # 3% credit
@@ -191,7 +276,23 @@ def get_tracks(client_id, client_secret, artist_name):
     
     # Use returned list of (url, headers, url_params) and function api_get_request to retrive all restaurants
     # REMEMBER to pause slightly after each request.
-    [YOUR CODE HERE]
+    results = []
+    for url, headers, url_params in tracks_request:
+        try:
+            resp = api_get_request(url, headers, url_params)
+        except Exception as e:
+            print(e)
+            continue
+
+        if resp and isinstance(resp, dict):
+            tracks = resp.get("tracks", {})
+            items = tracks.get("items", [])
+            if isinstance(items, list):
+                results.extend(items)
+
+        time.sleep(0.2)
+
+    return results
 
 # 4% credit
 def parse_api_response(data):
@@ -205,7 +306,18 @@ def parse_api_response(data):
         (list): list of URLs as strings from the input JSON.
     """
     
-    [YOUR CODE HERE]
+    parsed = json.loads(data)
+    items = parsed.get("tracks", {}).get("items", [])
+
+    # Collect all "url" fields from album images
+    urls = [
+        img["url"]
+        for item in items
+        for img in item.get("album", {}).get("images", [])
+        if "url" in img
+    ]
+
+    return urls
 
 
 def html_fetcher(url):
@@ -240,6 +352,17 @@ def parse_page(html):
     # Find all review containers on the page
     review_containers = soup.find_all('div', class_='lister-item-content')
     # HINT: print reviews to see what http tag to extract
-    [YOUR CODE HERE]
+    for container in review_containers:
+        author = container.find("span", class_="display-name-link")
+        rating = container.find("span", class_="rating-other-user-rating")
+        date = container.find("span", class_="review-date")
+        text = container.find("div", class_="text")
+
+        reviews_list.append({
+            "Author": author.get_text(strip=True) if author else None,
+            "Rating": float(rating.find("span").get_text(strip=True)) if rating and rating.find("span") else None,
+            "Date": date.get_text(strip=True) if date else None,
+            "Review": text.get_text(strip=True) if text else None
+        })
         
     return reviews_list
