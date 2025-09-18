@@ -55,15 +55,22 @@ def convert_to_minofday(time):
     Example: 13:03 is converted to 783.0
     """
     
-    time_parts = time.str.extract(r'(?P<h>\d+):(?P<m>\d+):(?P<s>\d+)')
-    hours = time_parts['h'].astype(float)
-    minutes = time_parts['m'].astype(float)
-    seconds = time_parts['s'].astype(float)
+    time_parts = time.str.split(':')
+    hours = time_parts.str[0]
+    hours.astype(float)
+    
+    minutes = time_parts.str[1]
+    minutes.astype(float)
+    
+    seconds= time_parts.str[2]
+    seconds.astype(float)
     
     
-    total_minutes = (hours * 60.0) + minutes
-    mask = (hours.between(0, 23)) & (minutes.between(0, 59)) & (seconds.between(0, 59))
-    total_minutes = total_minutes.where(mask, np.nan)
+    total_minutes = hours * 60 + minutes
+    total_minutes = total_minutes.where(
+        (hours >= 0) & (hours < 24) & (minutes >= 0) & (minutes < 60) & (seconds >= 0) & (seconds < 60),
+        np.nan
+    )
     
     return total_minutes
     
@@ -118,6 +125,18 @@ def conv_to_mins(time):
         return np.nan
     return ((60*hrs)+ mins)
 """
+
+
+
+def hhmm_to_minutes(hhmm):
+        """Convert numeric HHMM to minutes since midnight."""
+    str_val = str(int(hhmm)).zfill(4)
+    hours, minutes = int(str_val[:2]), int(str_val[2:])
+    
+    if not (0 <= hours < 24 and 0 <= minutes < 60):
+        return np.nan
+    
+    return hours * 60 + minutes
 def calc_delay(assigned_scheduled_times):
     """
     Calculates delay times y - x
@@ -131,19 +150,9 @@ def calc_delay(assigned_scheduled_times):
     if assigned_scheduled_times.shape[1] != 2:
         raise ValueError("Input DataFrame must have exactly 2 columns: scheduled and actual times")
     
-    def hhmm_to_minutes(hhmm):
-        """Convert numeric HHMM to minutes since midnight."""
-        str_val = str(int(hhmm)).zfill(4)
-        hours, minutes = int(str_val[:2]), int(str_val[2:])
-        
-        if not (0 <= hours < 24 and 0 <= minutes < 60):
-            return np.nan
+    scheduled_minutes = assigned_scheduled_times.iloc[:, 0].apply(hhmm_to_minutes)
+    actual_minutes = assigned_scheduled_times.iloc[:, 1].apply(hhmm_to_minutes)
     
-        return hours * 60 + minutes
-        
-        scheduled_minutes = assigned_scheduled_times.iloc[:, 0].map(hhmm_to_minutes)
-        actual_minutes = assigned_scheduled_times.iloc[:, 1].map(hhmm_to_minutes)
-        
-        delay = actual_minutes.subtract(scheduled_minutes)
-
-        return delay
+    delay = actual_minutes - scheduled_minutes
+    
+    return delay
